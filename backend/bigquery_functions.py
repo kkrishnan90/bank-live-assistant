@@ -366,10 +366,13 @@ def execute_fund_transfer(from_account_id: str, to_account_id: str, amount: floa
         return {"status": "ERROR_CURRENCY_MISMATCH", "message": err_msg}
 
     if from_account_details["balance"] < amount:
-        err_msg = (f"Insufficient funds in sender account '{from_account_id}'. "
-                   f"Available: {from_account_details['balance']} {currency}, Required: {amount} {currency}.")
+        err_msg = f"Insufficient funds in sender account '{from_account_id}'. Has: {from_account_details['balance']} {currency}, Needs: {amount} {currency}"
         log_bq_interaction(func_name, params, status="ERROR_INSUFFICIENT_FUNDS", error_message=err_msg)
-        return {"status": "ERROR_INSUFFICIENT_FUNDS", "message": err_msg}
+        return {
+            "status": "ERROR_INSUFFICIENT_FUNDS", "current_balance": from_account_details['balance'],
+            "requested_amount": amount, "currency": currency,
+            "from_account_id": from_account_id, "to_account_id": to_account_id, "message": err_msg
+        }
 
     transaction_base_id = f"txn_{uuid.uuid4().hex}"
     debit_transaction_id = f"{transaction_base_id}_D"
@@ -619,13 +622,20 @@ def _get_account_balance_by_id(account_id: str, user_id: str) -> dict:
         return {"status": "ERROR_QUERY_FAILED", "message": str(e)}
 
 
-def pay_bill(payee_id: str, amount: float, from_account_id: str) -> dict:
+def pay_bill(payee_id: str, amount: float, from_account_id: str, user_id: str = None) -> dict:
     """
-    Pays a bill for the USER_ID by deducting from the specified account,
+    Pays a bill for the specified user by deducting from the specified account,
     recording the transaction, and updating the bill's due amount.
+    
+    Args:
+        payee_id: The ID of the payee (biller) to pay.
+        amount: The amount to pay.
+        from_account_id: The account ID from which to deduct the payment.
+        user_id: The ID of the user making the payment. Defaults to the global USER_ID.
     """
     func_name = "pay_bill"
-    params = {"payee_id": payee_id, "amount": amount, "from_account_id": from_account_id, "user_id": USER_ID}
+    user_id = user_id or USER_ID
+    params = {"payee_id": payee_id, "amount": amount, "from_account_id": from_account_id, "user_id": user_id}
     query_str = None
 
     if not client:
@@ -637,7 +647,7 @@ def pay_bill(payee_id: str, amount: float, from_account_id: str) -> dict:
         return {"status": "ERROR_INVALID_AMOUNT", "message": "Payment amount must be a positive number."}
 
     # Validate source account and check balance
-    balance_details = _get_account_balance_by_id(from_account_id, USER_ID)
+    balance_details = _get_account_balance_by_id(from_account_id, user_id)
     if balance_details["status"] != "SUCCESS":
         err_msg = f"Error with payment account '{from_account_id}': {balance_details.get('message')}"
         log_bq_interaction(func_name, params, status=balance_details["status"], error_message=err_msg)
@@ -656,9 +666,9 @@ def pay_bill(payee_id: str, amount: float, from_account_id: str) -> dict:
         }
 
     # Validate payee
-    payee_name = _get_payee_name(payee_id, USER_ID) # This helper fetches from RegisteredBillers
+    payee_name = _get_payee_name(payee_id, user_id) # This helper fetches from RegisteredBillers
     if not payee_name: # payee_name here is actually biller_name
-        err_msg = f"Biller with ID '{payee_id}' not found for user '{USER_ID}'." # payee_id parameter is used as biller_id
+        err_msg = f"Biller with ID '{payee_id}' not found for user '{user_id}'." # payee_id parameter is used as biller_id
         log_bq_interaction(func_name, params, status="ERROR_BILLER_NOT_FOUND", error_message=err_msg)
         return {"status": "ERROR_BILLER_NOT_FOUND", "message": err_msg}
 
@@ -685,14 +695,10 @@ def pay_bill(payee_id: str, amount: float, from_account_id: str) -> dict:
     VALUES
         (@bill_txn_id, @from_account_id, @user_id, @timestamp, @description, -@amount, @currency, 'bill_payment', @memo);
 
-    -- Update the bill's last_due_amount to 0 and last_payment_date
-    -- Assuming 'due_amount' is the field to be updated to 0 as per get_bill_details structure.
-    -- If there's a specific 'last_due_amount' field, that should be used.
-    -- Adding last_payment_date and last_payment_amount for better tracking.
+    -- Update the bill's last_due_amount to 0 and set last_due_date to today's date
     UPDATE {registered_billers_table}
-    SET due_amount = 0,
-        last_payment_date = @timestamp,
-        last_payment_amount = @amount
+    SET last_due_amount = 0,
+        last_due_date = DATE(@timestamp)
     WHERE biller_id = @payee_id AND user_id = @user_id;
 
     COMMIT TRANSACTION;
@@ -702,7 +708,7 @@ def pay_bill(payee_id: str, amount: float, from_account_id: str) -> dict:
         query_parameters=[
             bigquery.ScalarQueryParameter("amount", "FLOAT64", amount),
             bigquery.ScalarQueryParameter("from_account_id", "STRING", from_account_id),
-            bigquery.ScalarQueryParameter("user_id", "STRING", USER_ID),
+            bigquery.ScalarQueryParameter("user_id", "STRING", user_id),
             bigquery.ScalarQueryParameter("bill_txn_id", "STRING", bill_txn_id),
             bigquery.ScalarQueryParameter("timestamp", "TIMESTAMP", current_timestamp_iso),
             bigquery.ScalarQueryParameter("description", "STRING", f"Bill Payment to {payee_name} (Biller ID: {payee_id})"),
@@ -714,7 +720,7 @@ def pay_bill(payee_id: str, amount: float, from_account_id: str) -> dict:
     )
 
     try:
-        logger.info(f"[{func_name}] Executing bill payment transaction for user {USER_ID}, payee {payee_id}, amount {amount} {currency} from account {from_account_id}.")
+        logger.info(f"[{func_name}] Executing bill payment transaction for user {user_id}, payee {payee_id}, amount {amount} {currency} from account {from_account_id}.")
         query_job = client.query(query_str, job_config=job_config)
         query_job.result()  # Wait for the transaction to complete
 
@@ -1039,7 +1045,7 @@ def get_accounts_for_user(user_id: str) -> list:
 
     accounts_table = _table_ref("Accounts")
     query_str = f"""
-        SELECT account_id, account_type, balance, currency
+        SELECT account_id, account_type, balance, currency, account_nickname
         FROM {accounts_table}
         WHERE user_id = @user_id
     """
@@ -1058,7 +1064,8 @@ def get_accounts_for_user(user_id: str) -> list:
                 "account_name": row.account_type, # Use account_type as the source for 'account_name' field
                 "account_type": row.account_type,
                 "balance": float(row.balance) if row.balance is not None else 0.0,
-                "currency": row.currency
+                "currency": row.currency,
+                "account_nickname": row.account_nickname
             })
         
         if not accounts_data:
@@ -1109,8 +1116,18 @@ def find_account_by_natural_language(user_id: str, natural_language_string: str)
     for acc in user_accounts:
         acc_name_lower = acc.get("account_name", "").lower()
         acc_type_lower = acc.get("account_type", "").lower()
+        acc_nickname_lower = acc.get("account_nickname", "").lower() # Get account nickname
         score = 0
         match_reasons = []
+
+        # Highest priority: Exact match on nickname
+        if acc_nickname_lower and acc_nickname_lower == nl_lower:
+            score += 200 # Very high score for exact nickname match
+            match_reasons.append("exact_nickname_match")
+        # High priority: All NL words in nickname (if nickname exists)
+        elif acc_nickname_lower and nl_words.issubset(set(acc_nickname_lower.split())):
+            score += 150 * len(nl_words)
+            match_reasons.append("all_nl_words_in_nickname")
 
         if acc_name_lower == nl_lower:
             score += 100
@@ -1134,12 +1151,12 @@ def find_account_by_natural_language(user_id: str, natural_language_string: str)
             score += 30
             match_reasons.append("type_substring_match")
         
-        if "primary" in nl_words and "primary" in acc_name_lower:
+        if "primary" in nl_words and ("primary" in acc_name_lower or ("primary" in acc_nickname_lower if acc_nickname_lower else False)):
             score += 25 # Specific boost for "primary"
-            match_reasons.append("primary_keyword_name_match")
+            match_reasons.append("primary_keyword_name_or_nickname_match")
         
         if score > 0:
-            potential_matches.append({"account_id": acc["account_id"], "account_name": acc["account_name"], "account_type": acc["account_type"], "score": score, "reasons": match_reasons})
+            potential_matches.append({"account_id": acc["account_id"], "account_name": acc["account_name"], "account_type": acc["account_type"], "account_nickname": acc.get("account_nickname", ""), "score": score, "reasons": match_reasons})
 
     if not potential_matches:
         log_bq_interaction(func_name, params, status="ERROR_ACCOUNT_NOT_FOUND", error_message=f"No matching account found for '{natural_language_string}'.")
@@ -1149,17 +1166,18 @@ def find_account_by_natural_language(user_id: str, natural_language_string: str)
     best_match = potential_matches[0]
 
     # If only one match, or top score is significantly higher
-    if len(potential_matches) == 1 or best_match["score"] >= 50 and (len(potential_matches) == 1 or best_match["score"] > potential_matches[1]["score"] + 20) :
-        log_bq_interaction(func_name, params, status="SUCCESS", result_summary=f"Found account: {best_match['account_id']} (Name: {best_match['account_name']}, Type: {best_match['account_type']}, Score: {best_match['score']})")
+    if len(potential_matches) == 1 or best_match["score"] >= 100 and (len(potential_matches) == 1 or best_match["score"] > potential_matches[1]["score"] + 20) :
+        log_bq_interaction(func_name, params, status="SUCCESS", result_summary=f"Found account: {best_match['account_id']} (Name: {best_match['account_name']}, Nickname: {best_match.get('account_nickname', 'N/A')}, Type: {best_match['account_type']}, Score: {best_match['score']})")
         return {
             "status": "SUCCESS",
             "account_id": best_match["account_id"],
             "account_name": best_match["account_name"],
+            "account_nickname": best_match.get("account_nickname", "N/A"), # Include nickname in response
             "account_type": best_match["account_type"],
-            "message": f"Successfully identified account '{best_match['account_name']}'."
+            "message": f"Successfully identified account '{best_match['account_name']}' (Nickname: {best_match.get('account_nickname', 'N/A')})."
         }
     else:
-        ambiguous_options = [{"account_id": m["account_id"], "name": m["account_name"], "type": m["account_type"], "score": m["score"]} for m in potential_matches if m["score"] > 10][:3] # Show top 3 with reasonable score
+        ambiguous_options = [{"account_id": m["account_id"], "name": m["account_name"], "nickname": m.get("account_nickname", "N/A"), "type": m["account_type"], "score": m["score"]} for m in potential_matches if m["score"] > 10][:3] # Show top 3 with reasonable score
         if not ambiguous_options: # If all scores are too low
              log_bq_interaction(func_name, params, status="ERROR_ACCOUNT_NOT_FOUND", error_message=f"No sufficiently matching account found for '{natural_language_string}'. Top score: {best_match['score']}")
              return {"status": "ERROR_ACCOUNT_NOT_FOUND", "message": f"Could not find a sufficiently clear match for account '{natural_language_string}'."}

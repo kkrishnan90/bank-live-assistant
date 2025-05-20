@@ -541,10 +541,10 @@ async def payBill(payee_id: str, amount: float, from_account_id: str):
             _log_tool_event("INVOCATION_END", tool_name, params_sent, biller_resolution_result) # Log with original params
             return biller_resolution_result # Return the error from resolver
 
-    logger.info(f"[{tool_name}] Attempting to call bigquery_functions.pay_bill with payee_id: {resolved_payee_id}, amount: {amount}, resolved_from_account_id: {resolved_from_account_id}")
+    logger.info(f"[{tool_name}] Attempting to call bigquery_functions.pay_bill with payee_id: {resolved_payee_id}, amount: {amount}, resolved_from_account_id: {resolved_from_account_id}, user_id: {USER_ID}")
     api_response = {}
     try:
-        bq_result = bigquery_functions.pay_bill(resolved_payee_id, amount, resolved_from_account_id)
+        bq_result = bigquery_functions.pay_bill(payee_id=resolved_payee_id, amount=amount, from_account_id=resolved_from_account_id, user_id=USER_ID)
         logger.info(f"[{tool_name}] Received from bigquery_functions.pay_bill: {bq_result}")
         # BQ Success: {"status": "SUCCESS", "confirmation_number": ..., "message": ...}
         # BQ Error: {"status": "INSUFFICIENT_FUNDS", ...} or {"status": "ERROR_PAYEE_NOT_FOUND", ...}
