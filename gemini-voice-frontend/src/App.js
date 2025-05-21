@@ -17,6 +17,8 @@ const LANGUAGES = [
   { code: 'id-ID', name: 'Indonesian' },
 ];
 
+const BACKEND_HOST =  'gemini-backend-service-1018963165306.us-central1.run.app';
+
 // Utility to generate unique IDs (stable, defined outside component)
 const generateUniqueId = () => `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
 
@@ -84,7 +86,7 @@ const App = () => {
   const fetchBigQueryLogs = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('https://gemini-backend-service-1018963165306.us-central1.run.app/api/logs');
+      const response = await fetch(`https://${BACKEND_HOST}/api/logs`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -289,7 +291,7 @@ const App = () => {
       socketRef.current.close(1000, 'Language changed by user - pre-emptive close'); // Close it before creating new
     }
     addLogEntry('ws', `Connecting to WebSocket with language: ${language}...`);
-    socketRef.current = new WebSocket(`wss://gemini-backend-service-1018963165306.us-central1.run.app/listen?lang=${language}`);
+    socketRef.current = new WebSocket(`wss://${BACKEND_HOST}/listen?lang=${language}`);
     socketRef.current.binaryType = 'arraybuffer';
 
     socketRef.current.onopen = () => {
