@@ -91,7 +91,7 @@ async def websocket_endpoint():
     current_session_handle = None # Initialize session handle
 
     gemini_live_config = types.LiveConnectConfig(
-        response_modalities=[types.Modality.AUDIO], # Matched to reference
+        response_modalities=["AUDIO"], # Matched to reference
         system_instruction="You are helpful assistant for banking services. You are currently interacting with a user who is using a voice-based interface to interact with you. You should respond to the user's voice commands in a natural and conversational manner.You should use the same language as the user, and you should not use any emojis or special characters.\
             Your `user_id` is `user_krishnan_001` and your `biller_id` is `biller_k_elec_001`.",
         speech_config=types.SpeechConfig(

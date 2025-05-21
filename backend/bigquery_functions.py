@@ -489,7 +489,7 @@ def get_bill_details(bill_type: str, payee_nickname: str = None) -> dict:
         query_params_list.append(bigquery.ScalarQueryParameter("payee_nickname", "STRING", payee_nickname))
         
     query_str = f"""
-        SELECT biller_id, biller_name, due_amount, due_date, default_payment_account_id, status
+        SELECT biller_id, biller_name, last_due_amount as due_amount, last_due_date as due_date, default_payment_account_id
         FROM {billers_table}
         WHERE {" AND ".join(where_conditions)}
     """
@@ -515,8 +515,7 @@ def get_bill_details(bill_type: str, payee_nickname: str = None) -> dict:
                     "biller_id": row.biller_id, "biller_name": row.biller_name,
                     "due_amount": float(row.due_amount) if row.due_amount is not None else None,
                     "due_date": row.due_date.isoformat() if isinstance(row.due_date, (datetime.datetime, datetime.date)) else str(row.due_date),
-                    "default_payment_account_id": row.default_payment_account_id,
-                    "biller_status": row.status
+                    "default_payment_account_id": row.default_payment_account_id
                 } for row in results]
             }
 
@@ -525,8 +524,7 @@ def get_bill_details(bill_type: str, payee_nickname: str = None) -> dict:
             "biller_id": row.biller_id, "biller_name": row.biller_name,
             "due_amount": float(row.due_amount) if row.due_amount is not None else None,
             "due_date": row.due_date.isoformat() if isinstance(row.due_date, (datetime.datetime, datetime.date)) else str(row.due_date),
-            "default_payment_account_id": row.default_payment_account_id,
-            "biller_status": row.status
+            "default_payment_account_id": row.default_payment_account_id
         }
         log_bq_interaction(func_name, params, query_str, status="SUCCESS", result_summary=f"Biller found: {row.biller_id} - {row.biller_name}")
         return {"status": "SUCCESS", **result_data}
