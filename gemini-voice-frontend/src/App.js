@@ -19,6 +19,7 @@ const App = () => {
   const [messages, setMessages] = useState([]); // Stores log entries: { id, type, content, timestamp }
   const [textInputValue, setTextInputValue] = useState(''); // For the text input field
   const [transcriptionMessages, setTranscriptionMessages] = useState([]); // Stores transcription messages: { id, sender, text, is_final }
+  const [isLoading, setIsLoading] = useState(false); // Tracks loading state for API calls
  
   const [bigQueryLogs, setBigQueryLogs] = useState([]); // Stores BigQuery log entries
 
@@ -73,6 +74,7 @@ const App = () => {
 
   // --- Fetch BigQuery Logs ---
   const fetchBigQueryLogs = useCallback(async () => {
+    setIsLoading(true);
     try {
       const response = await fetch('/api/logs');
       if (!response.ok) {
@@ -126,6 +128,8 @@ const App = () => {
     } catch (error) {
       console.error("Failed to fetch BigQuery logs:", error);
       addLogEntry('error', `Failed to fetch BigQuery logs: ${error.message}`);
+    } finally {
+      setIsLoading(false);
     }
   }, [addLogEntry]); // addLogEntry is a dependency
 
@@ -560,6 +564,7 @@ const App = () => {
           </div>
         </div>
         <div className="logs-area" ref={logsAreaRef}>
+          {isLoading && <p className="loading-indicator">Loading...</p>}
           {messages.map(msg => ( // messages now includes BigQuery logs
             <div key={msg.id} className={`log-entry log-entry-${msg.type} ${msg.type === 'bigquery' ? 'log-entry-bigquery' : ''}`}>
               <span className="log-timestamp">[{msg.timestamp}] </span>
