@@ -10,6 +10,13 @@ const INPUT_SAMPLE_RATE = 16000;  // For microphone input to Gemini (Native 16kH
 const OUTPUT_SAMPLE_RATE = 24000; // For Gemini's audio output (24kHz)
 const MIC_BUFFER_SIZE = 4096;  // Buffer size for ScriptProcessorNode
 
+// Language Constants
+const LANGUAGES = [
+  { code: 'en-US', name: 'English' },
+  { code: 'th-TH', name: 'Thai' },
+  { code: 'id-ID', name: 'Indonesian' },
+];
+
 // Utility to generate unique IDs (stable, defined outside component)
 const generateUniqueId = () => `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
 
@@ -20,7 +27,8 @@ const App = () => {
   const [textInputValue, setTextInputValue] = useState(''); // For the text input field
   const [transcriptionMessages, setTranscriptionMessages] = useState([]); // Stores transcription messages: { id, sender, text, is_final }
   const [isLoading, setIsLoading] = useState(false); // Tracks loading state for API calls
- 
+  const [selectedLanguage, setSelectedLanguage] = useState(LANGUAGES[0].code); // Default to English
+  
   const [bigQueryLogs, setBigQueryLogs] = useState([]); // Stores BigQuery log entries
 
   const isRecordingRef = useRef(isRecording);
@@ -269,17 +277,23 @@ const App = () => {
   }, [addLogEntry]); // currentAudioSourceRef, audioQueueRef, isPlayingRef are refs, not needed in deps
 
   // --- WebSocket Connection - Uses addLogEntry ---
-  const connectWebSocket = useCallback(() => {
+  const connectWebSocket = useCallback((language) => {
     if (socketRef.current && (socketRef.current.readyState === WebSocket.OPEN || socketRef.current.readyState === WebSocket.CONNECTING)) {
-      addLogEntry('ws', 'WebSocket already open or connecting. Aborting new connection.');
-      return;
+      // If trying to connect with the same language and already open/connecting, do nothing.
+      if (socketRef.current.url.includes(`lang=${language}`)) {
+        addLogEntry('ws', `WebSocket already open or connecting with ${language}. Aborting new connection.`);
+        return;
+      }
+      // If language is different, the useEffect should have closed it.
+      addLogEntry('ws', `WebSocket open/connecting, but language mismatch. Expected ${language}. Current URL: ${socketRef.current.url}. Proceeding to close and reconnect.`);
+      socketRef.current.close(1000, 'Language changed by user - pre-emptive close'); // Close it before creating new
     }
-    addLogEntry('ws', 'Connecting to WebSocket...');
-    socketRef.current = new WebSocket('ws://localhost:8000/listen');
+    addLogEntry('ws', `Connecting to WebSocket with language: ${language}...`);
+    socketRef.current = new WebSocket(`ws://localhost:8000/listen?lang=${language}`);
     socketRef.current.binaryType = 'arraybuffer';
 
     socketRef.current.onopen = () => {
-      addLogEntry('ws', 'WebSocket Connected.');
+      addLogEntry('ws', `WebSocket Connected (Lang: ${language}).`);
       setIsRecording(true); // Auto-start recording on successful connection
     };
     socketRef.current.onmessage = (event) => {
@@ -368,11 +382,53 @@ const App = () => {
       setIsRecording(false);
     };
     socketRef.current.onclose = (event) => {
-      addLogEntry('ws', `WebSocket Disconnected. Code: ${event.code}, Reason: ${event.reason || 'No reason given'}`);
-      setIsRecording(false);
-      // Optionally attempt to reconnect or clean up resources
+      addLogEntry('ws', `WebSocket Disconnected. Code: ${event.code}, Reason: "${event.reason || 'No reason given'}"`);
+      setIsRecording(false); // Ensure recording state is updated
+      
+      // Specific handling for language change or unmount closures
+      if (event.reason === 'Language changed by user' || event.reason === 'Component unmounting' || event.reason === 'Component unmounting or language changing again' || event.reason === 'Language changed by user - pre-emptive close') {
+        addLogEntry('ws', `WebSocket closed intentionally (${event.reason}). No automatic reconnection.`);
+      } else if (event.code !== 1000 && event.code !== 1005) { // 1000 normal, 1005 no status
+        addLogEntry('error', `WebSocket closed unexpectedly. Code: ${event.code}. Consider manual reconnect.`);
+      }
     };
-  }, [addLogEntry, playNextGeminiChunk]);
+  }, [addLogEntry, playNextGeminiChunk]); // selectedLanguage is not needed here as it's passed as 'language' parameter
+
+  // Effect to manage WebSocket connection based on selected language
+  useEffect(() => {
+    const currentLangName = LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage;
+    addLogEntry('system', `Language selected: ${currentLangName} (${selectedLanguage}). Managing WebSocket connection.`);
+
+    if (socketRef.current && (socketRef.current.readyState === WebSocket.OPEN || socketRef.current.readyState === WebSocket.CONNECTING)) {
+      if (!socketRef.current.url.includes(`lang=${selectedLanguage}`)) {
+        addLogEntry('ws', `Language or URL mismatch. Closing existing WebSocket (state: ${socketRef.current.readyState}) for ${socketRef.current.url}`);
+        socketRef.current.close(1000, 'Language changed by user');
+        // Set a timeout to establish new connection after the old one has had a chance to close
+        const timeoutId = setTimeout(() => {
+          addLogEntry('ws', `Attempting to connect with new language: ${currentLangName} (${selectedLanguage}) after old socket closure initiated.`);
+          connectWebSocket(selectedLanguage);
+        }, 150); // Adjusted delay
+        return () => clearTimeout(timeoutId);
+      } else {
+         addLogEntry('ws', `WebSocket already connected with ${currentLangName} (${selectedLanguage}). No change needed.`);
+         return; // Already connected with the correct language
+      }
+    } else {
+      // No open/connecting socket, or socket exists but is closed/closing. Attempt to connect.
+      addLogEntry('ws', `No active WebSocket or mismatch. Connecting with language: ${currentLangName} (${selectedLanguage}).`);
+      connectWebSocket(selectedLanguage);
+    }
+    
+    return () => {
+      if (socketRef.current && 
+          (socketRef.current.readyState === WebSocket.OPEN || socketRef.current.readyState === WebSocket.CONNECTING) &&
+          socketRef.current.url.includes(`lang=${selectedLanguage}`)) { 
+        addLogEntry('ws', `Effect cleanup for ${currentLangName} (${selectedLanguage}): Closing WebSocket.`);
+        socketRef.current.close(1000, 'Component unmounting or language changing again');
+      }
+    };
+  }, [selectedLanguage, connectWebSocket, addLogEntry]);
+
 
   // --- Microphone Audio Processing - Uses addLogEntry ---
   const processAudio = useCallback((audioProcessingEvent) => {
@@ -436,15 +492,33 @@ const App = () => {
       source.connect(scriptProcessorNodeRef.current);
       scriptProcessorNodeRef.current.connect(localAudioContextRef.current.destination); // Connect to destination to start processing
 
-      connectWebSocket(); // This will set isRecording to true on successful connection
-      // setIsRecording(true); // Moved to WebSocket onopen
+      // connectWebSocket is now primarily handled by the useEffect for selectedLanguage.
+      // However, if the socket is not open and we click start, we should ensure it tries to connect with the current language.
+      if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+        const currentLangName = LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage;
+        addLogEntry('ws', `Start Listening: WebSocket not open. Attempting connection with ${currentLangName} (${selectedLanguage}).`);
+        connectWebSocket(selectedLanguage);
+      } else {
+         // If socket is already open, ensure it's for the correct language.
+         // The useEffect for selectedLanguage should handle mismatches, but this is a safeguard.
+        if (!socketRef.current.url.includes(`lang=${selectedLanguage}`)) {
+          const currentLangName = LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage;
+          addLogEntry('ws', `Start Listening: WebSocket open but language mismatch. Re-initiating connection for ${currentLangName} (${selectedLanguage}).`);
+          socketRef.current.close(1000, 'Language mismatch on start listening');
+          // Delay to allow close then reconnect via useEffect
+          setTimeout(() => connectWebSocket(selectedLanguage), 150);
+        } else {
+          setIsRecording(true); // If already open with correct language, just set recording.
+        }
+      }
+      // setIsRecording(true); // This is now mostly handled by socket onopen or above logic.
 
     } catch (err) {
       console.error('Error accessing microphone or setting up audio processing:', err);
       addLogEntry('error', `Microphone Error: ${err.message}. Please check permissions.`);
       setIsRecording(false);
     }
-  }, [isRecording, processAudio, connectWebSocket, addLogEntry, getPlaybackAudioContext]);
+  }, [isRecording, processAudio, connectWebSocket, addLogEntry, getPlaybackAudioContext, selectedLanguage]);
 
   // --- Stop Listening (Pauses sending audio to Gemini, keeps WS open) ---
   const handlePauseListening = useCallback(() => {
@@ -527,15 +601,36 @@ const App = () => {
   // --- Send Text Message ---
   const handleSendTextMessage = useCallback(() => {
     if (!textInputValue.trim()) return;
+    
+    const currentLangName = LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage;
+    addLogEntry('user_text', `User typed (Lang: ${currentLangName}): "${textInputValue}"`);
+
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      const messagePayload = { type: 'text_input', text: textInputValue };
+      const messagePayload = { 
+        type: 'text_message', // Ensure backend expects this type for text
+        text: textInputValue,
+        language: selectedLanguage, // Add selected language to payload
+        timestamp: new Date().toISOString(),
+        id: generateUniqueId() 
+      };
       socketRef.current.send(JSON.stringify(messagePayload));
-      addLogEntry('user_text', `You (text): ${textInputValue}`);
+      
+      // Add to local transcription display as a user message
+      setTranscriptionMessages(prev => [
+        ...prev,
+        {
+          id: messagePayload.id, 
+          sender: 'user',
+          text: textInputValue,
+          is_final: true, 
+          timestamp: new Date().toLocaleTimeString()
+        }
+      ]);
       setTextInputValue(''); // Clear input field
     } else {
-      addLogEntry('error', 'Cannot send text: WebSocket not connected.');
+      addLogEntry('error', 'Cannot send text: WebSocket not connected or not open.');
     }
-  }, [textInputValue, addLogEntry]);
+  }, [textInputValue, addLogEntry, selectedLanguage]);
 
   const handleClearConsole = () => {
     setMessages([]);
@@ -620,14 +715,72 @@ const App = () => {
           <button onClick={handleHardStop} className="control-button stop-button" title="Stop Session">
             <FontAwesomeIcon icon={faStop} />
           </button>
-          {/* Mute/Unmute button removed */}
-          {/* Clear Console button removed */}
-          <div className="audio-signal-placeholder">
+          
+          {/* Language Selector in Control Bar */}
+          <div className="language-selector-control-bar" style={{ display: 'flex', alignItems: 'center', marginLeft: '12px', marginRight: '10px' }}>
+            <label htmlFor="language-select-ctrl" style={{ marginRight: '6px', color: '#c0c0c0', fontSize:'0.8rem', fontWeight: 'normal', whiteSpace: 'nowrap' }}>Language:</label>
+            <select
+              id="language-select-ctrl"
+              value={selectedLanguage}
+              onChange={(e) => {
+                const newLangCode = e.target.value;
+                const newLangName = LANGUAGES.find(l => l.code === newLangCode)?.name || newLangCode;
+                addLogEntry('ui_event', `Language changed to: ${newLangName} (${newLangCode})`);
+                setSelectedLanguage(newLangCode);
+              }}
+              style={{ 
+                padding: '5px 8px', 
+                borderRadius: '4px', 
+                border: '1px solid #4a4a4a', 
+                backgroundColor: '#252526', 
+                color: '#d4d4d4', 
+                fontSize:'0.8rem', 
+                cursor: 'pointer',
+                outline: 'none',
+                height: '30px', 
+                minWidth: '120px' 
+              }}
+              title="Select Language"
+            >
+              {LANGUAGES.map(lang => (
+                <option key={lang.code} value={lang.code} style={{backgroundColor: '#252526', color: '#d4d4d4', padding: '5px'}}>
+                  {lang.name} ({lang.code})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="audio-signal-placeholder"> 
             {isRecording && (
               <div className="audio-wave">
                 <span></span><span></span><span></span><span></span><span></span>
               </div>
             )}
+          </div>
+          
+          {/* Combined Status Indicator in Control Bar */}
+          <div className="status-indicator-ctrl-bar" 
+               style={{ 
+                 marginLeft: 'auto', 
+                 marginRight: '10px', 
+                 color: '#c0c0c0', 
+                 fontSize: '0.75rem', 
+                 display: 'flex', 
+                 alignItems: 'center',
+                 padding: '0 10px', 
+                 backgroundColor: '#252526',
+                 border: '1px solid #4a4a4a',
+                 borderRadius: '4px',
+                 height: '30px', 
+                 lineHeight: '30px'
+               }}>
+             MIC:&#160;{isRecording ? 
+                  <span style={{color: '#66bb6a', fontWeight:'bold', letterSpacing: '0.5px'}}>ON</span> : 
+                  <span style={{color: '#ef5350', fontWeight:'bold', letterSpacing: '0.5px'}}>OFF</span>}
+             <span style={{margin: '0 10px', color: '#505050'}}>|</span>
+             WS:&#160;{socketRef.current && socketRef.current.readyState === WebSocket.OPEN ? 
+                  <span style={{color: '#66bb6a', fontWeight:'bold', letterSpacing: '0.5px'}}>ON ({LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage})</span> : 
+                  <span style={{color: '#ef5350', fontWeight:'bold', letterSpacing: '0.5px'}}>OFF</span>}
           </div>
         </div>
         {/* Text input area moved to console-panel */}

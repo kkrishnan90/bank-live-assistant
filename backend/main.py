@@ -91,12 +91,26 @@ async def websocket_endpoint():
     # print("Quart WebSocket: Connection accepted from client.")
     current_session_handle = None # Initialize session handle
 
+    # Determine language code based on query parameter
+    requested_lang = websocket.args.get("lang")
+    supported_new_languages = ["en-US", "th-TH", "id-ID"]
+    
+    if requested_lang and requested_lang in supported_new_languages:
+        language_code_to_use = requested_lang
+        # print(f"Quart WebSocket: Using requested language: {language_code_to_use}")
+    else:
+        language_code_to_use = "en-IN" # Default to existing if not specified or not one of the new ones
+        # if requested_lang:
+            # print(f"Quart WebSocket: Requested language '{requested_lang}' not supported or invalid, defaulting to {language_code_to_use}")
+        # else:
+            # print(f"Quart WebSocket: No language specified, defaulting to {language_code_to_use}")
+
     gemini_live_config = types.LiveConnectConfig(
         response_modalities=["AUDIO"], # Matched to reference
         system_instruction="You are helpful assistant for banking services. You are currently interacting with a user who is using a voice-based interface to interact with you. You should respond to the user's voice commands in a natural and conversational manner.You should use the same language as the user, and you should not use any emojis or special characters.\
             Your `user_id` is `user_krishnan_001` and your `biller_id` is `biller_k_elec_001`.",
         speech_config=types.SpeechConfig(
-            language_code="en-IN"
+            language_code=language_code_to_use
         ),
         input_audio_transcription={},
         output_audio_transcription={},
