@@ -2,7 +2,7 @@
   "name": "gemini-voice-frontend",
   "version": "0.1.0",
   "private": true,
-  "proxy": "http://localhost:8000",
+  "proxy": "https://gemini-backend-service-1018963165306.us-central1.run.app",
   "dependencies": {
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/react-fontawesome": "^0.2.2",

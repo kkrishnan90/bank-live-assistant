@@ -84,7 +84,7 @@ const App = () => {
   const fetchBigQueryLogs = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/logs');
+      const response = await fetch('https://gemini-backend-service-1018963165306.us-central1.run.app/api/logs');
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -289,7 +289,7 @@ const App = () => {
       socketRef.current.close(1000, 'Language changed by user - pre-emptive close'); // Close it before creating new
     }
     addLogEntry('ws', `Connecting to WebSocket with language: ${language}...`);
-    socketRef.current = new WebSocket(`ws://localhost:8000/listen?lang=${language}`);
+    socketRef.current = new WebSocket(`ws://gemini-backend-service-1018963165306.us-central1.run.app/listen?lang=${language}`);
     socketRef.current.binaryType = 'arraybuffer';
 
     socketRef.current.onopen = () => {

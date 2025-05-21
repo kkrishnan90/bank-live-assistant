@@ -38,7 +38,8 @@ GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
 # os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "path/to/your/service-account-file.json"
 # In a deployed environment (e.g., Google Cloud Run/Functions), this is often handled automatically.
 try:
-    client = bigquery.Client(project=GOOGLE_CLOUD_PROJECT, credentials=service_account.Credentials.from_service_account_file(CREDENTIALS_PATH))
+    # client = bigquery.Client(project=GOOGLE_CLOUD_PROJECT, credentials=service_account.Credentials.from_service_account_file(CREDENTIALS_PATH))
+    client = bigquery.Client(project="account-pocs")
     # Attempt a simple query to verify connection and credentials
     # This also helps in resolving the project ID if not explicitly set
     if client.project:
