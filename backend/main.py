@@ -23,7 +23,8 @@ from gemini_tools import (
     registerBiller,
     updateBillerDetails,
     removeBiller,
-    listRegisteredBillers
+    listRegisteredBillers,
+    search_faq
 )
 from bigquery_functions import GLOBAL_LOG_STORE # Import the global log store
 
@@ -193,6 +194,7 @@ async def websocket_endpoint():
                     "updateBillerDetails": updateBillerDetails,
                     "removeBiller": removeBiller,
                     "listRegisteredBillers": listRegisteredBillers,
+                    "search_faq": search_faq
                 }
                 current_user_utterance_id = None
                 accumulated_user_speech_text = "" # Renamed from latest_user_speech_text and initialized
@@ -378,7 +380,10 @@ async def websocket_endpoint():
                                             print(f"\033[92mQuart Backend: Calling function {fc.name} with args: {function_args}\033[0m")
                                             # Await the async function call
                                             result = await function_to_call(**function_args)
-                                            function_response_content = result # Use the actual result
+                                            if isinstance(result, str):
+                                                function_response_content = {"content": result}
+                                            else:
+                                                function_response_content = result # Assumes result is already a dict if not a string
                                             print(f"\033[92mQuart Backend: Function {fc.name} executed. Result: {result}\033[0m")
                                         except Exception as e:
                                             print(f"Quart Backend: Error executing function {fc.name}: {e}")

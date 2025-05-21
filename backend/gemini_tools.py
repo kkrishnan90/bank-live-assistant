@@ -1,4 +1,6 @@
 from google.genai import types
+from google.cloud import discoveryengine
+from google.api_core.client_options import ClientOptions
 import asyncio # For potential future use with to_thread
 import bigquery_functions # Use absolute import
 from bigquery_functions import USER_ID # Import USER_ID
@@ -15,6 +17,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Helper function for structured logging
+YOUR_DATASTORE_ID = "bank-faq-demo-ds_1747707296437"
+SEARCH_ENGINE_ID = "bank-faq-demo_1747707209997"
 def _log_tool_event(event_type: str, tool_name: str, parameters: dict, response: dict = None):
     """Helper function to create and print a structured log entry for tool events."""
     log_payload = {
@@ -672,6 +676,82 @@ async def listRegisteredBillers():
     _log_tool_event("INVOCATION_END", tool_name, params_sent, api_response)
     return api_response
 
+def search_spec():
+    content_search_spec = discoveryengine.SearchRequest.ContentSearchSpec(
+        snippet_spec=discoveryengine.SearchRequest.ContentSearchSpec.SnippetSpec(
+            return_snippet=True
+        ),
+        summary_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec(
+            summary_result_count=3,
+            ignore_adversarial_query=True,
+        ),
+    )
+    return content_search_spec
+
+async def search_faq(search_query: str) -> str:
+    """Searches and provides answers to bank-related Frequently Asked Questions (FAQs).
+
+    This function utilizes Google Cloud Discovery Engine to find relevant information
+    based on the user's query. It's specifically tailored to address common
+    questions a user might have for the bank.
+
+    The underlying search is configured with:
+    - A specific project ID ("account-pocs") and location ("global").
+    - A predefined search engine ID (SEARCH_ENGINE_ID).
+    - Content search specifications for snippets and summaries.
+    - Automatic query expansion.
+    - Automatic spell correction.
+
+    Args:
+        search_query: The string containing the user's question or search query.
+
+    Returns:
+        A string containing the summary text from the search response, aiming to
+        answer the user's FAQ.
+    """
+    location = "global"
+    project_id = "account-pocs"
+    engine_id = SEARCH_ENGINE_ID
+
+    client_options = (
+        ClientOptions(api_endpoint=f"{location}-discoveryengine.googleapis.com")
+        if location != "global"
+        else None
+    )
+
+    client = discoveryengine.SearchServiceClient(client_options=client_options)
+
+    serving_config = f"projects/{project_id}/locations/{location}/collections/default_collection/engines/{engine_id}/servingConfigs/default_config"
+
+    content_search_spec_config = search_spec()
+
+    request = discoveryengine.SearchRequest(
+        serving_config=serving_config,
+        query=search_query,
+        page_size=10,
+        content_search_spec=content_search_spec_config,
+        query_expansion_spec=discoveryengine.SearchRequest.QueryExpansionSpec(
+            condition=discoveryengine.SearchRequest.QueryExpansionSpec.Condition.AUTO,
+        ),
+        spell_correction_spec=discoveryengine.SearchRequest.SpellCorrectionSpec(
+            mode=discoveryengine.SearchRequest.SpellCorrectionSpec.Mode.AUTO
+        ),
+    )
+    response = await asyncio.to_thread(client.search, request)
+    return response.summary.summary_text
+# Function Declaration for search_faq
+search_faq_declaration = types.FunctionDeclaration(
+    name="search_faq",
+    description="Searches and provides answers to bank-related Frequently Asked Questions (FAQs) using Google Cloud Discovery Engine.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "search_query": types.Schema(type=types.Type.STRING, description="The search query from the user.")
+        },
+        required=["search_query"]
+    )
+)
+# search_faq_declaration, # This line is removed as the declaration is added to banking_tool.function_declarations
 # Tool instance containing all function declarations
 banking_tool = types.Tool(
     function_declarations=[
@@ -685,6 +765,7 @@ banking_tool = types.Tool(
         updateBillerDetails_declaration,
         removeBiller_declaration,
         listRegisteredBillers_declaration,
+        search_faq_declaration,
     ]
 )
 

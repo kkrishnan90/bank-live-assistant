@@ -8,3 +8,4 @@ quart-cors
 hypercorn
 google-cloud-bigquery
 python-dotenv
+google-cloud-discoveryengine
