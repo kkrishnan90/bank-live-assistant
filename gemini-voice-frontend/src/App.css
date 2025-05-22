@@ -18,12 +18,15 @@ body {
 }
 
 .console-panel {
-  width: 350px; /* Slightly wider for more content */
-  background-color: #161b22; /* Darker shade for console (GitHub dark borders/ui bg) */
-  padding: 15px;
+  width: 280px;
+  background-color: #161b22;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #30363d; /* GitHub dark border color */
+  border-right: 1px solid #30363d;
+  gap: 20px;
+  height: 100vh;
+  box-sizing: border-box;
 }
 
 .console-header {
@@ -88,7 +91,10 @@ body {
   font-size: 0.9em;
   line-height: 1.5;
   border: 1px solid #30363d;
-  margin-bottom: 10px; /* Space before the new text input area in console */
+  /* margin-bottom: 15px; */ /* Removed to allow full height */
+  /* min-height: 60vh; */ /* Removed to allow full height */
+  /* max-height: calc(100vh - 250px); */ /* Removed to allow full height */
+  height: 100%; /* Added to ensure it tries to take full available space */
 }
 
 .logs-area > p { /* This was for the old status text, might not be needed */
@@ -255,50 +261,84 @@ body {
 /* Control Bar (Bottom) */
 .control-bar {
   display: flex;
-  justify-content: center; /* Center the tray */
-  align-items: center;
-  padding: 10px 15px;
+  flex-direction: column; /* Stack the groups vertically */
+  align-items: center; /* Center groups horizontally */
+  padding: 15px 20px; /* Increased padding around the control bar */
   background-color: #161b22;
   border-top: 1px solid #30363d;
   flex-shrink: 0;
+  gap: 35px; /* Increased space between the groups */
 }
 
-.control-tray {
+.main-controls-group,
+.status-indicators-group,
+.language-selector-container {
   display: flex;
   align-items: center;
+  justify-content: center; /* Center items within each group */
+  width: 100%; /* Allow groups to take full width if needed, or manage via content */
+  gap: 20px; /* Increased gap between items within a group */
+  padding-top: 10px; /* Increased padding */
+  padding-bottom: 10px; /* Increased padding */
 }
 
-.control-tray .control-button {
+.language-selector-container {
+  /* Specific styling for language selector if needed, e.g., alignment if label is above */
+  margin-bottom: 25px; /* Add space below language selector */
+}
+
+.language-selector-label {
+  font-size: 0.8em; /* Consistent small font */
+  color: #c9d1d9;
+  margin-right: 5px; /* Space between label and dropdown */
+  white-space: nowrap;
+}
+
+/* .control-tray styles are replaced by the group styles above */
+/* .control-tray.main-controls is replaced by .main-controls-group */
+
+.control-button { /* Base style for all buttons in control groups */
   background-color: #21262d;
   color: #c9d1d9;
   border: 1px solid #30363d;
   border-radius: 6px;
-  padding: 8px 12px; /* Adjusted padding for icon buttons */
-  height: 40px;
-  min-width: 40px;
+  padding: 8px 10px;
+  height: auto;
+  min-width: 60px;
   font-size: 1.2em; /* Icon size */
   display: flex;
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  margin: 0 5px; /* Space around buttons */
+  /* margin: 0 5px; */ /* Replaced by gap in parent group */
   transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+  margin-bottom: 20px; /* Add significant space below each control element */
 }
 
-.control-tray .control-button:hover:not(:disabled) {
+/* Specific hover/active/muted states for .control-button */
+.control-button:hover:not(:disabled) {
   background-color: #30363d;
   border-color: #8b949e;
 }
 
-.control-tray .control-button.mic-button.active { /* For mic button when recording */
+.control-button.mic-button.active {
   background-color: #c93c37cc;
   border-color: #f85149;
 }
-.control-tray .control-button.mic-button.active:hover {
+.control-button.mic-button.active:hover {
   background-color: #f85149;
 }
 
-.control-tray .control-button:disabled {
+.control-button.mic-button.muted {
+  background-color: #484f58;
+  border-color: #6e7681;
+  color: #adbac7;
+}
+.control-button.mic-button.muted:hover {
+  background-color: #586069;
+}
+
+.control-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -315,44 +355,47 @@ body {
 
 /* Styles for text-input-area moved to console panel */
 .console-text-input-area {
-  display: flex;
+  display: none; /* Hidden as per request */
   align-items: center;
-  padding: 10px 0px 0px 0px; /* Padding above the input area in console */
-  /* border-top: 1px solid #30363d; */ /* Optional: separator line */
+  padding: 0;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: auto;
+  min-height: 40px;
 }
 
 .console-text-input-area .text-input {
-  flex-grow: 1;
-  padding: 10px 12px;
-  background-color: #010409;
+  flex: 1;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 12px;
+  background-color: #0d1117;
   color: #c9d1d9;
   border: 1px solid #30363d;
   border-radius: 6px;
-  font-size: 0.9em; /* Slightly smaller for console */
+  font-size: 0.95em;
   margin-right: 8px;
+  box-sizing: border-box;
 }
 
-.console-text-input-area .text-input:focus {
-  outline: none;
-  border-color: #58a6ff;
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
-}
-
-.console-text-input-area .send-button { /* This is a .control-button */
+.console-text-input-area .send-button {
   background-color: #238636;
   color: white;
   border: 1px solid #2ea043;
   border-radius: 6px;
-  padding: 0; /* Remove padding if only icon */
-  width: 40px; /* Fixed width for icon button */
-  height: 40px; /* Fixed height for icon button */
-  font-size: 1.1em; /* Icon size */
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  font-size: 1em;
   display: flex;
   justify-content: center;
   align-items: center;
   cursor: pointer;
   transition: background-color 0.2s ease-in-out;
-  flex-shrink: 0; /* Prevent send button from shrinking */
+  flex-shrink: 0;
+  box-sizing: border-box;
+  margin-right: 12px;
 }
 
 .console-text-input-area .send-button:hover:not(:disabled) {
@@ -451,4 +494,150 @@ code {
 .user-bubble + .ai-bubble,
 .ai-bubble + .user-bubble {
   margin-top: 10px; /* Ensure distinct spacing between different speakers */
+}
+
+/* Styles for new elements in Control Bar */
+.language-selector-dropdown {
+  padding: 6px 10px;
+  background-color: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  font-size: 0.9em;
+  /* margin: 0 5px; */ /* Replaced by gap in parent group */
+  height: 40px; /* Keep height consistent with other controls */
+  min-width: 120px;
+  margin-bottom: 30px !important;
+}
+.language-selector-dropdown:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.status-indicator { /* Base style for status indicators */
+  padding: 10px 15px;
+  background-color: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  font-size: 0.85em; /* Base size for the indicator block itself */
+  /* margin: 0 5px; */ /* Replaced by gap in parent group */
+  height: auto;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap; /* Prevent icon and text from wrapping on their own line initially */
+  margin-bottom: 30px !important;
+}
+
+.websocket-status {
+  min-width: 100px;
+}
+
+.connection-status { /* This class seems unused in App.js, but keeping for completeness if it was intended */
+  min-width: 110px;
+}
+
+/* Styles for Icon Buttons (Session, Mic) with Text Below */
+.icon-button-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2; /* Spacing between icon and text line */
+}
+
+.icon-button-text,
+.icon-status-text { /* Uniform font style and size for all small status texts */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif; /* Ensure consistent font stack */
+  font-size: 0.7em; /* Uniform small size */
+  margin-top: 6px; /* Increased space between icon and its text */
+  color: #c9d1d9;
+  white-space: normal; /* Allow text to wrap if it's too long for the container */
+  text-align: center; /* Center wrapped text */
+  line-height: 1.1; /* Adjust line height for wrapped text if necessary */
+}
+
+/* Styles for Icon Status Indicators (WS, Session Status) with Text Below */
+.icon-status-indicator .icon-status-content { /* Container for icon + text within a status indicator */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
+}
+
+/* Ensure the main control buttons can accommodate the icon + text content */
+.control-button.icon-button {
+  margin-bottom: 30px !important; 
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 60px;
+  padding: 12px 10px;
+}
+
+/* Ensure status indicators can accommodate icon + text content */
+.status-indicator.icon-status-indicator {
+  min-height: 50px; /* Ensure enough height for icon + text */
+  min-width: 70px;  /* Minimum width to prevent squishing */
+  padding: 8px 5px; /* Adjust padding for better spacing */
+}
+
+/* Ensure main-panel and results-content are structured to not shrink transcription area */
+.main-panel {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  /* height: 100%; */ /* This might be too restrictive if app-container isn't managing height perfectly */
+  overflow: hidden; /* Prevent internal scrollbars if possible, manage scrolling in results-content */
+}
+
+.results-content {
+  flex-grow: 1; /* This is crucial: it takes up available space, pushing control-bar down */
+  overflow-y: auto; /* Allows transcription to scroll independently */
+  padding: 0px 20px 20px 20px; /* Keep existing padding */
+}
+
+.app-container {
+  display: flex;
+  height: 100vh; /* Full viewport height */
+  width: 100vw;  /* Full viewport width */
+  overflow: hidden; /* Prevent the entire page from scrolling */
+}
+
+/* Additional spacing for specific button groups if they're contained in another element */
+.main-controls-group button,
+.status-indicators-group > div {
+  margin-bottom: 20px; /* Ensure space between buttons in groups */
+}
+
+/* If the controls are wrapped in a specific container, target that too */
+.console-controls-container > * {
+  margin-bottom: 25px; /* Even more space between major control sections */
+}
+
+/* Console Panel Controls */
+.console-panel > button,
+.console-panel > div > button,
+.console-panel > select,
+.console-panel > div > select,
+.console-panel > div {
+  margin-bottom: 30px !important; /* Force significant spacing between direct control elements */
+}
+
+/* Additional spacing for the bottom elements */
+.console-panel > div:last-child {
+  margin-top: 10px;
+}
+
+.console-text-input-area .text-input:focus {
+  outline: none;
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
 }
